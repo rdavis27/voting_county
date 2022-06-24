@@ -1,7 +1,7 @@
 library(leaflet)
 
 shinyUI(pageWithSidebar(
-    headerPanel("Shift between Races by County, 2020 Election"),
+    headerPanel("Shift between Races by County"),
     sidebarPanel(
         width = 2,
         splitLayout(
