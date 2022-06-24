@@ -8,6 +8,7 @@ library(urbnmapr)
 #library(maps)
 library(leaflet)
 library(sf)
+library(rgeos)
 
 input_dir <- "input/"
 data_dir  <- "data/"
