@@ -719,7 +719,7 @@ shinyServer(
             write(paste(partyxx, collapse = " "), paste0(data_dir,"WI_House_2020.csv"))
             write_delim(yy, paste0(data_dir,"WI_House_2020.csv"), append = TRUE, col_names = TRUE)
         }
-        getlabels <- function(){
+        getlabels <- function(type){
             if (input$measure == "Percent change"){
                 tshift <- "% Change in"
             }
@@ -735,11 +735,19 @@ shinyServer(
             else{
                 tunits <- "Votes"
             }
-            if (input$party == "Margin"){
-                tnote <- "(positive direction is more Democratic)"
+            if (type == "map"){
+                tnote <- input$titlenote
+            }
+            else if (input$party == "Margin"){
+                if (input$titlenote == ""){
+                    tnote <- "(positive direction is more Democratic)"
+                }
+                else{
+                    tnote <- input$titlenote
+                }
             }
             else{
-                tnote <- ""
+                tnote <- input$titlenote
             }
             if (input$district == ""){
                 tstate2 <- input$state2
@@ -891,10 +899,15 @@ shinyServer(
                 tunits <- "Votes"
             }
             if (input$party == "Margin"){
-                tnote <- "(positive direction is more Democratic)"
+                if (input$titlenote == ""){
+                    tnote <- "(positive direction is more Democratic)"
+                }
+                else{
+                    tnote <- input$titlenote
+                }
             }
             else{
-                tnote <- ""
+                tnote <- input$titlenote
             }
             if (input$district == ""){
                 tstate2 <- input$state2
@@ -1080,10 +1093,15 @@ shinyServer(
                 tunits <- "Votes"
             }
             if (input$party == "Margin"){
-                tnote <- "(positive direction is more Democratic)"
+                if (input$titlenote == ""){
+                    tnote <- "(positive direction is more Democratic)"
+                }
+                else{
+                    tnote <- input$titlenote
+                }
             }
             else{
-                tnote <- ""
+                tnote <- input$titlenote
             }
             if (input$district == ""){
                 tstate2 <- input$state2
@@ -1158,6 +1176,7 @@ shinyServer(
             dd <- getdata() # COUNTY,DEM1,REP1,MARGIN1,TOTAL1,DEM2,REP2,MARGIN2,TOTAL2,
                             # DEM_SH,REP_SH,MAR_SH,TOT_SH,DEM1_N,REP1_N,MAR1_N,TOT1_N,TOT2_N
             dd <- dd[dd$COUNTY != "TOTAL",]
+            #zdd <<- dd #DEBUG-RM
 
             #dd <- dd[dd$DEM1 != 0 & dd$REP1 != 0 & dd$DEM2 != 0 & dd$REP2 != 0,] #Include only 2-party races
             mapvar <- input$mapvar2
@@ -1198,9 +1217,11 @@ shinyServer(
             dd$COUNTY <- toupper(dd$COUNTY)
             ee <- cc %>% left_join(dd, by = c("NAME" = "COUNTY"))
             ee$var <- ee[[input$mapvar2]]
-
+            labels <- getlabels("map")
+            titletext <- paste0("<b>",labels[4],"</b><br>")
             mm <- leaflet(ee) %>%
                 addTiles() %>%
+                addControl(titletext, position = "topright", className="map-title") %>%
                 addPolygons(stroke = FALSE, smoothFactor = 0.3, fillOpacity = 0.5,
                             fillColor = ~pal(var),
                             label = ~paste0(NAME, ": ", formatC(var, big.mark = ","))) %>%
@@ -1248,7 +1269,7 @@ shinyServer(
             else{
                 stdata <- urbnmapr::countydata
             }
-            labels <- getlabels()
+            labels <- getlabels("map")
             xlabel <- paste0("longitude\nSources: see http://econdataus.com/voting_stats.htm")
             mapvar <- input$mapvar
             if (mapvar == "DEM1"){mapvar <- names(dd)[2]}
@@ -1583,6 +1604,23 @@ shinyServer(
             dd$MAR1_N <- MAR1_N
             dd$TOT1_N <- TOT1_N
             dd$TOT2_N <- TOT2_N
+            if (input$equipfield != "(none)"){
+                filename <- paste0("verifier/verifier-machines",input$yeary,".csv")
+                if (file.exists(filename)){
+                    vv <- read_csv(filename,skip = 1)
+                    istate <- which(stabbr == input$state2)
+                    vv <- vv[vv$State == states[istate],]
+                    vv$Jurisdiction <- gsub(" County$","",vv$Jurisdiction,ignore.case = TRUE)
+                    #vv <- vv[vv[[input$equipfield]] == input$equipvalue,]
+                    vv <- vv[grepl(input$equipvalue,vv[[input$equipfield]]),]
+                    zvv <<- vv #DEBUG-RM
+                    dd$EQUIP <- -1
+                    dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
+                }
+                else{
+                    print(paste0("########## ",filename," NOT FOUND"))
+                }
+            }
             dd
         })
         observeEvent(input$mapsave,{
