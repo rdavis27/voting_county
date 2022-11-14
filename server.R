@@ -765,6 +765,18 @@ shinyServer(
                 ylabel <- paste(tshift, input$party, "Voters to", input$party,
                                 racey)
             }
+            else if (input$mapvar2 == "MARGIN1"){
+                title <- paste(input$party, tunits, "in", racex,
+                               "Race in", tstate2,
+                               "counties", tnote)
+                ylabel <- paste(input$party, tunits, "in", racex)
+            }
+            else if (input$mapvar2 == "MARGIN2"){
+                title <- paste(input$party, tunits, "in", racey,
+                               "Race in", tstate2,
+                               "counties", tnote)
+                ylabel <- paste(input$party, tunits, "in", racey)
+            }
             else if (input$fcounty != ""){
                 title <- paste(tshift, input$party, tunits, "from",
                                racex, "to", racey,
