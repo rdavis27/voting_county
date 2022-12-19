@@ -11,10 +11,13 @@ library(sf)
 library(rgeos)
 
 input_dir <- "input/"
+input2_dir <- "input2/"
 data_dir  <- "data/"
+gvv <- NULL # verifier dataframe for current year and state
+hvv <- NULL # verifier dataframe for current year, state, and equipment
 
 shinyServer(
-    function(session,input, output) {
+    function(session,input,output) {
         options(width = 140, readr.show_progress = FALSE)
         options(max.print=999999)
 
@@ -685,6 +688,21 @@ shinyServer(
             write(paste(xxparty, collapse = " "), paste0(data_dir,"TX_Registered_2020.csv"))
             write_delim(xx, paste0(data_dir,"TX_Registered_2020.csv"), append = TRUE, col_names = TRUE)
         }
+        createTX22Governor <- function(){
+            filenamex <- paste0(input_dir,"Governor_TX_sos_221128.csv")
+            xxnames <- read_delim(filenamex, '\t', col_names = FALSE, n_max = 1)
+            xx1 <- read_delim(filenamex, '\t', skip = 1)
+            xx <- as.data.frame(xx1)
+            xx <- xx[,c(1,4,6,15)]
+            names(xx) <- c("COUNTY","Abbott","O'Rourke","Other")
+            xxparty <- c("COUNTY","REP","DEM","OTHER")
+            xx$COUNTY <- str_to_title(xx$COUNTY)
+            xx <- xx[!is.na(xx$Abbott),]
+            xx <- xx[xx$COUNTY != "All Counties",]
+            xx$Other <- xx$Other - xx$Abbott - xx$`O'Rourke`
+            write(paste(xxparty, collapse = " "), paste0(data_dir,"TX_Governor_2022.csv"))
+            write_delim(xx, paste0(data_dir,"TX_Governor_2022.csv"), append = TRUE, col_names = TRUE)
+        }
         createWI <- function(){
             xx0 <- read_excel(paste0(input_dir,"WI_County by County Report all offices.xlsx"), sheet = "Sheet2", skip = 6)
             xx <- xx0[,c(-2,-12,-13)] # delete NA column
@@ -1037,19 +1055,20 @@ shinyServer(
         #},)
         output$myTable1 <- renderPrint({
             if (input$createfiles){
-                createCA()
-                createFL()
-                createGA()
-                createIA()
-                createME()
-                createMI()
-                createMN()
-                createNC()
-                createPA()
-                createSC()
-                createTX()
-                createWI()
-                createStates_President_2000_2020()
+                # createCA()
+                # createFL()
+                # createGA()
+                # createIA()
+                # createME()
+                # createMI()
+                # createMN()
+                # createNC()
+                # createPA()
+                # createSC()
+                # createTX()
+                # createWI()
+                # createStates_President_2000_2020()
+                createTX22Governor()
             }
             xxlist <- getdatax()
             xxparty <- xxlist[[1]]
@@ -1084,7 +1103,8 @@ shinyServer(
             if (names(dd)[2] == "DISTRICT"){
                 firstn <- 3
             }
-            dd <- dd[,1:(NCOL(dd)-4)]
+            #dd <- dd[,1:(NCOL(dd)-4)]
+            dd <- dd[,1:18]
             dp <- 2
             for (i in firstn:NCOL(dd)){
                 dd[,i] <- format(round(dd[,i], dp), big.mark=",", scientific=FALSE)
@@ -1137,6 +1157,107 @@ shinyServer(
             }
             cat(paste0(title,"\n\n"))
             print(dd)
+        })
+        getpop <- function(){
+            filename <- paste0("input2/","co-est2020.csv")
+            xx <- read_csv(filename)
+            istate <- which(stabbr == input$state2)
+            xx <- xx[xx$STNAME == states[istate],]
+            xx <- xx[grepl(" County",xx$CTYNAME),]
+            xx$CTYNAME <- gsub(" County","",xx$CTYNAME)
+            pyear <- input$yeary
+            if (pyear < 2010) pyear <- 2010
+            if (pyear > 2020) pyear <- 2020
+            pname <- paste0("POPESTIMATE",pyear)
+            pp <- data.frame(xx$CTYNAME,xx[[pname]])
+            names(pp) <- c("COUNTY","POPULATION")
+            return(pp)
+        }
+        output$myTable3 <- renderPrint({
+            dd <- getdata()
+            firstn <- 2
+            if (names(dd)[2] == "DISTRICT"){
+                firstn <- 3
+            }
+            #dd <- dd[,1:(NCOL(dd)-4)]
+            dd <- dd[,c(1,12,19:NCOL(dd))]
+            
+            dp <- 2
+            for (i in firstn:NCOL(dd)){
+                if (is.numeric(unlist(dd[,i]))){
+                    dd[,i] <- format(round(dd[,i], dp), big.mark=",", scientific=FALSE)
+                }
+            }
+            if (input$measure == "Percent change"){
+                tshift <- "Percent change in"
+            }
+            else if (input$measure == "Percent ratio"){
+                tshift <- "Percent ratio of"
+            }
+            else{
+                tshift <- "Shift in"
+            }
+            if (input$units == "Percent"){
+                tunits <- "Vote Share"
+            }
+            else{
+                tunits <- "Votes"
+            }
+            if (input$party == "Margin"){
+                if (input$titlenote == ""){
+                    tnote <- "(positive direction is more Democratic)"
+                }
+                else{
+                    tnote <- input$titlenote
+                }
+            }
+            else{
+                tnote <- input$titlenote
+            }
+            if (input$district == ""){
+                tstate2 <- input$state2
+            }
+            else{
+                tstate2 <- paste0(input$state2,"-",input$district)
+            }
+            racex <- paste0(input$racex,"_",input$yearx)
+            racey <- paste0(input$racey,"_",input$yeary)
+            if (input$racey == "Registered"){
+                title <- paste0(tshift," Voters for ",
+                                racex," to ",racey,
+                                " Voters in ",tstate2," counties (",
+                                input$units,")")
+            }
+            else{
+                title <- paste0(tshift," ",tunits," from ",
+                                racex," to ",racey,
+                                " Race in ",tstate2," counties (",
+                                input$units,")")
+            }
+            cat(paste0(title,"\n\n"))
+            print(dd)
+        })
+        output$myLN <- renderPrint({
+            dd <- getdata()
+            firstn <- 2
+            if (names(dd)[2] == "DISTRICT"){
+                firstn <- 3
+            }
+            #dd <- dd[,1:(NCOL(dd)-4)]
+            dd <- dd[,c(1,12,19:NCOL(dd))]
+            #dd$MAR_SH <- -dd$MAR_SH #DEBUG-TEST-RM
+
+            form <- "MAR_SH ~"
+            # for (i in 4:NCOL(dd)){
+            #     form <- paste0(form," + ",names(dd)[i])
+            # }
+            for (i in input$xivars){
+                form <- paste0(form," + ",i)
+            }
+            lmfit <- lm(as.formula(form), data = dd)
+            print(lmfit$coefficients)
+            print(summary(lmfit))
+            zff <<- lmfit #DEBUG-RM
         })
         output$myVoteData <- renderPrint({
             states <- c("CA","FL","GA","IA","ME","MI","MN","NC","PA","SC","TX","WI")
@@ -1616,23 +1737,50 @@ shinyServer(
             dd$MAR1_N <- MAR1_N
             dd$TOT1_N <- TOT1_N
             dd$TOT2_N <- TOT2_N
-            if (input$equipfield != "(none)"){
-                filename <- paste0("verifier/verifier-machines",input$yeary,".csv")
-                if (file.exists(filename)){
-                    vv <- read_csv(filename,skip = 1)
-                    istate <- which(stabbr == input$state2)
-                    vv <- vv[vv$State == states[istate],]
-                    vv$Jurisdiction <- gsub(" County$","",vv$Jurisdiction,ignore.case = TRUE)
-                    #vv <- vv[vv[[input$equipfield]] == input$equipvalue,]
-                    vv <- vv[grepl(input$equipvalue,vv[[input$equipfield]]),]
-                    zvv <<- vv #DEBUG-RM
-                    dd$EQUIP <- -1
-                    dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
-                }
-                else{
-                    print(paste0("########## ",filename," NOT FOUND"))
+            dd$EQUIP <- 0
+            if (!is.null(input$xmodel)){
+                #vv <- gvv[grepl(input$xmodel,gvv$Model),]
+                vv <- gvv[gvv$Model %in% input$xmodel,]
+                dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
+                for (i in 1:length(input$xmodel)){
+                    #dd[[input$xmodel[i]]] <- 1
+                    vv <- gvv[gvv$Model == input$xmodel[i],]
+                    dd[[input$xmodel[i]]] <- 0
+                    dd[[input$xmodel[i]]][toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
+                    dd[[input$xmodel[i]]] <- as.factor(dd[[input$xmodel[i]]])
                 }
             }
+            else if (!is.null(input$xmake)){
+                #vv <- gvv[grepl(input$xmake,gvv$Make),]
+                vv <- gvv[gvv$Make %in% input$xmake,]
+                dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
+                for (i in 1:length(input$xmake)){
+                    #dd[[input$xmake[i]]] <- 1
+                    vv <- gvv[gvv$Make == input$xmake[i],]
+                    dd[[input$xmake[i]]] <- 0
+                    dd[[input$xmake[i]]][toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
+                    dd[[input$xmodel[i]]] <- as.factor(dd[[input$xmodel[i]]])
+                }
+            }
+            else if (!is.null(input$xequipment)){
+                #vv <- gvv[grepl(input$xequipment,gvv$'Equipment Type'),]
+                vv <- gvv[gvv$'Equipment Type' %in% input$xequipment,]
+                dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
+                for (i in 1:length(input$xequipment)){
+                    #dd[[input$xequipment[i]]] <- 1
+                    vv <- gvv[gvv$'Equipment Type' == input$xequipment[i],]
+                    dd[[input$xequipment[i]]] <- 0
+                    dd[[input$xequipment[i]]][toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
+                    dd[[input$xmodel[i]]] <- as.factor(dd[[input$xmodel[i]]])
+                }
+            }
+            pp <- getpop()
+            dd <- merge(dd, pp, by = "COUNTY")
+            names(dd) <- gsub(" ","_",names(dd))
+            zdd <<- dd
+            updateCheckboxGroupInput(session,"xivars",
+                                     choices = names(dd)[19:NCOL(dd)],
+                                     selected = names(dd)[20:NCOL(dd)])
             dd
         })
         observeEvent(input$mapsave,{
@@ -1756,6 +1904,34 @@ shinyServer(
                     }
                 }
             }
+        })
+        observe({
+            filename <- paste0("verifier/verifier-machines",input$yeary,".csv")
+            if (file.exists(filename)){
+                vv <- read_csv(filename,skip = 1)
+                istate <- which(stabbr == input$state2)
+                vv <- vv[vv$State == states[istate],]
+                vv$Jurisdiction <- gsub(" County$","",vv$Jurisdiction,ignore.case = TRUE)
+                gvv <<- vv #DEBUG-RM
+                choicelist <- sort(unique(vv$'Equipment Type'))
+                updateSelectInput(session = session,"xequipment",choices = choicelist)
+            }
+            else{
+                print(paste0("########## ",filename," NOT FOUND"))
+            }
+            
+        })
+        observeEvent(input$xequipment,{
+            vv <- gvv[gvv$'Equipment Type' == input$xequipment,]
+            choicelist <- sort(unique(vv$Make))
+            updateSelectInput(session = session,"xmake",choices = choicelist)
+            hvv <<- vv
+        })
+        observeEvent(input$xmake,{
+            vv <- hvv[hvv$Make == input$xmake,]
+            choicelist <- sort(unique(vv$Model))
+            updateSelectInput(session = session,"xmodel",choices = choicelist)
+            ivv <<- vv
         })
         observe({
             cat(file=stderr(), paste0("v3: ",input$state2," ",input$tabs,"\n"))

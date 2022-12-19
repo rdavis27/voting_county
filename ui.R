@@ -46,11 +46,18 @@ shinyUI(pageWithSidebar(
             numericInput("yearx", "Year, x-axis", 2016),
             numericInput("yeary", "Year, y-axis", 2020)
         ),
-        selectInput("equipfield", "Equipment field",
-                    choices = c("(none)","Make","Model"),
-                    selected = "(none)",
-                    multiple = FALSE),
-        textInput("equipvalue", "Equipment value", value = "DS200"),
+        selectInput("xequipment", "Equipment",
+                    choices = c(""),
+                    selected = "",
+                    multiple = TRUE),
+        selectInput("xmake", "Make",
+                    choices = c(""),
+                    selected = "",
+                    multiple = TRUE),
+        selectInput("xmodel", "Model",
+                    choices = c(""),
+                    selected = "",
+                    multiple = TRUE),
         textInput("titlenote", "Title note", value = ""),
         selectInput("distype", "District type",
                     choices = c("2-party","1 & 2-party","Non-zero","All"),
@@ -74,6 +81,25 @@ shinyUI(pageWithSidebar(
                          width = 9,
                          verbatimTextOutput("myTable2")
                      )
+            ),
+            tabPanel("Table3",
+                     mainPanel(
+                         width = 9,
+                         verbatimTextOutput("myTable3")
+                     )
+            ),
+            tabPanel("LN",
+                sidebarPanel(
+                    width = 3,
+                    checkboxGroupInput("xivars", "Variables",
+                        choices = c("EQUIP"),
+                        selected = c("EQUIP"),
+                        inline = TRUE),
+                ),
+                mainPanel(
+                    width = 9,
+                    verbatimTextOutput("myLN")
+                )
             ),
             tabPanel("Plot",
                 sidebarPanel(
