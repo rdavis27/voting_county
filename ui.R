@@ -91,7 +91,7 @@ shinyUI(pageWithSidebar(
             tabPanel("LN",
                 sidebarPanel(
                     width = 3,
-                    checkboxGroupInput("xivars", "Variables",
+                    checkboxGroupInput("xevars", "Variables",
                         choices = c("EQUIP"),
                         selected = c("EQUIP"),
                         inline = TRUE),
@@ -189,7 +189,9 @@ shinyUI(pageWithSidebar(
                     splitLayout(
                         numericInput("mapyear2", "Map Year", 2020)
                     ),
-                    textInput("mapcolors2", "Map Colors", value = "RdBu")
+                    textInput("mapcolors2", "Map Colors", value = "RdBu"),
+                    textInput("ecolors2", "Equip Colors", value = "white,red,violet,blue,green,yellow,orange,black,gray"),
+                    textInput("elabels2", "Equip Labels", value = "")
                 ),
                 mainPanel(
                     width = 9,

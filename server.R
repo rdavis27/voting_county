@@ -1251,7 +1251,7 @@ shinyServer(
             # for (i in 4:NCOL(dd)){
             #     form <- paste0(form," + ",names(dd)[i])
             # }
-            for (i in input$xivars){
+            for (i in input$xevars){
                 form <- paste0(form," + ",i)
             }
             lmfit <- lm(as.formula(form), data = dd)
@@ -1350,16 +1350,63 @@ shinyServer(
             dd$COUNTY <- toupper(dd$COUNTY)
             ee <- cc %>% left_join(dd, by = c("NAME" = "COUNTY"))
             ee$var <- ee[[input$mapvar2]]
-            labels <- getlabels("map")
-            titletext <- paste0("<b>",labels[4],"</b><br>")
-            mm <- leaflet(ee) %>%
-                addTiles() %>%
-                addControl(titletext, position = "topright", className="map-title") %>%
-                addPolygons(stroke = FALSE, smoothFactor = 0.3, fillOpacity = 0.5,
-                            fillColor = ~pal(var),
-                            label = ~paste0(NAME, ": ", formatC(var, big.mark = ","))) %>%
-                addLegend(pal = pal, values = ~(var), opacity = 1.0)
+            if (input$mapvar2 == "EQUIP"){
+                titletext <- paste0("<b>Voting Equipment used in ",input$state2," counties in ",input$yeary,"</b><br>")
+                ecolors <- unlist(strsplit(input$ecolors2,","))
+                elabels <- rep("None",length(ecolors))
+                elabs <- unlist(strsplit(input$elabels2,","))
+                iequip <- as.numeric(sort(unique(ee$EQUIP)))
+                mm <- length(iequip)
+                nn <- mm
+                if (sum(is.na(ee$EQUIP)) > 0){
+                    nn <- nn+1
+                    elabels[nn] <- "NA"
+                }
+                ilegend <- seq(1,nn)
+                ecolors <- ecolors[1:nn]
+                elabels <- elabels[1:nn]
+                ee$ILEGEND <- nn # for NA
+                for (i in 1:(nn-1)){
+                    ee$ILEGEND[ee$EQUIP == iequip[i]] <- i
+                    mask <- 1
+                    for (j in 1:length(elabs)){
+                        if (bitwAnd(iequip[i],mask) > 0){
+                            if (elabels[i] == "None"){
+                                elabels[i] <- paste0(elabs[j])
+                            }
+                            else{
+                                elabels[i] <- paste0(elabs[j],"/",elabels[i])
+                            }
+                        }
+                        mask <- mask*2
+                        #print(paste0("elabels[",i,"]=",elabels[i])) #DEBUG-RM
+                    }
+                }
+                pal <- colorNumeric(ecolors, ilegend)
+                zee <<- ee #DEBUG-RM
+                mm <- leaflet(ee) %>%
+                    addTiles() %>%
+                    addControl(titletext, position = "topright", className="map-title") %>%
+                    addPolygons(stroke = FALSE, smoothFactor = 0.3, fillOpacity = 0.5,
+                                fillColor = ~pal(ILEGEND),
+                                label = ~paste0(NAME, ": ", formatC(var, big.mark = ","))) %>%
+                    #addLegend(pal = pal, values = ~(var), opacity = 1.0)
+                    addLegend(values = ~(var), opacity = 1.0,
+                              colors = ecolors, labels = elabels)
                 #           labFormat = labelFormat(transform = function(x) round(10^x)))
+            }
+            else{
+                labels <- getlabels("map")
+                titletext <- paste0("<b>",labels[4],"</b><br>")
+                mm <- leaflet(ee) %>%
+                    addTiles() %>%
+                    addControl(titletext, position = "topright", className="map-title") %>%
+                    addPolygons(stroke = FALSE, smoothFactor = 0.3, fillOpacity = 0.5,
+                                fillColor = ~pal(var),
+                                label = ~paste0(NAME, ": ", formatC(var, big.mark = ","))) %>%
+                    addLegend(pal = pal, values = ~(var), opacity = 1.0)
+                #           labFormat = labelFormat(transform = function(x) round(10^x)))
+            }
             print(mm)
         })
         output$myggMap <- renderPlot({
@@ -1741,44 +1788,52 @@ shinyServer(
             if (!is.null(input$xmodel)){
                 #vv <- gvv[grepl(input$xmodel,gvv$Model),]
                 vv <- gvv[gvv$Model %in% input$xmodel,]
-                dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
+                #dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
                 for (i in 1:length(input$xmodel)){
                     #dd[[input$xmodel[i]]] <- 1
                     vv <- gvv[gvv$Model == input$xmodel[i],]
                     dd[[input$xmodel[i]]] <- 0
                     dd[[input$xmodel[i]]][toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
                     dd[[input$xmodel[i]]] <- as.factor(dd[[input$xmodel[i]]])
+                    dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <-
+                        dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] + 2^(i-1)
                 }
             }
             else if (!is.null(input$xmake)){
                 #vv <- gvv[grepl(input$xmake,gvv$Make),]
                 vv <- gvv[gvv$Make %in% input$xmake,]
-                dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
+                #dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
                 for (i in 1:length(input$xmake)){
                     #dd[[input$xmake[i]]] <- 1
                     vv <- gvv[gvv$Make == input$xmake[i],]
                     dd[[input$xmake[i]]] <- 0
                     dd[[input$xmake[i]]][toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
-                    dd[[input$xmodel[i]]] <- as.factor(dd[[input$xmodel[i]]])
+                    dd[[input$xmake[i]]] <- as.factor(dd[[input$xmake[i]]])
+                    dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <-
+                        dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] + 2^(i-1)
                 }
             }
             else if (!is.null(input$xequipment)){
                 #vv <- gvv[grepl(input$xequipment,gvv$'Equipment Type'),]
                 vv <- gvv[gvv$'Equipment Type' %in% input$xequipment,]
-                dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
+                #dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
                 for (i in 1:length(input$xequipment)){
                     #dd[[input$xequipment[i]]] <- 1
                     vv <- gvv[gvv$'Equipment Type' == input$xequipment[i],]
                     dd[[input$xequipment[i]]] <- 0
                     dd[[input$xequipment[i]]][toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
-                    dd[[input$xmodel[i]]] <- as.factor(dd[[input$xmodel[i]]])
+                    dd[[input$xequipment[i]]] <- as.factor(dd[[input$xequipment[i]]])
+                    dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <-
+                        dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] + 2^(i-1)
                 }
             }
             pp <- getpop()
             dd <- merge(dd, pp, by = "COUNTY")
             names(dd) <- gsub(" ","_",names(dd))
+            names(dd) <- gsub("-","_",names(dd))
+            names(dd) <- gsub("/","_",names(dd))
             zdd <<- dd
-            updateCheckboxGroupInput(session,"xivars",
+            updateCheckboxGroupInput(session,"xevars",
                                      choices = names(dd)[19:NCOL(dd)],
                                      selected = names(dd)[20:NCOL(dd)])
             dd
@@ -1909,8 +1964,11 @@ shinyServer(
             filename <- paste0("verifier/verifier-machines",input$yeary,".csv")
             if (file.exists(filename)){
                 vv <- read_csv(filename,skip = 1)
+                #vv <- read.csv(filename,skip = 1,row.names = NULL)
                 istate <- which(stabbr == input$state2)
                 vv <- vv[vv$State == states[istate],]
+                vv$Jurisdiction <- gsub("[A-Za-z /-]*\\(","",vv$Jurisdiction,ignore.case = TRUE)
+                vv$Jurisdiction <- gsub("\\)","",vv$Jurisdiction,ignore.case = TRUE)
                 vv$Jurisdiction <- gsub(" County$","",vv$Jurisdiction,ignore.case = TRUE)
                 gvv <<- vv #DEBUG-RM
                 choicelist <- sort(unique(vv$'Equipment Type'))
