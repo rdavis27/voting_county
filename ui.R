@@ -95,6 +95,10 @@ shinyUI(pageWithSidebar(
                         choices = c("EQUIP"),
                         selected = c("EQUIP"),
                         inline = TRUE),
+                    checkboxInput("standardize","Standardize",value = FALSE),
+                    checkboxInput("lnallstates","All States",value = FALSE),
+                    textInput("lnmatch","Match",value = "POPULATION"),
+                    textInput("lnlimit","Limit",value = "0.001")
                 ),
                 mainPanel(
                     width = 9,
@@ -196,6 +200,36 @@ shinyUI(pageWithSidebar(
                 mainPanel(
                     width = 9,
                     leafletOutput("myLeaflet", height = "800px")
+                )
+            ),
+            tabPanel(
+                "LN_Map",
+                sidebarPanel(
+                    width = 3,
+                    selectInput("maplimitset3", "Map Limits",
+                                choices = c("Auto set to min,max",
+                                            "Auto set balanced",
+                                            "Use value(s) below"),
+                                selected = "Use value(s) below",
+                                multiple = FALSE),
+                    textInput("maplimits3", NULL, value = "-1.5,1.5,1"),
+                    selectInput("mapvar3", "Map Variable",
+                                choices = c("mvalue"),
+                                selected = "mvalue",
+                                multiple = FALSE),
+                    splitLayout(
+                        numericInput("mapyear3", "Map Year", 2020)
+                    ),
+                    textInput("mapcolors3", "Map Colors", value = "RdBu"),
+                    splitLayout(
+                        numericInput("mapload3", "Load", 1),
+                        actionButton("mapsave3", "Save")
+                    )
+                ),
+                mainPanel(
+                    width = 9,
+                    leafletOutput("myLN_Map", height = 600, width = 1000)
+                    #leafletOutput("myLN_Map", height = 800)
                 )
             ),
             tabPanel("Data",

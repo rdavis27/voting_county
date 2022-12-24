@@ -9,6 +9,7 @@ library(urbnmapr)
 library(leaflet)
 library(sf)
 library(rgeos)
+library(tigris)
 
 input_dir <- "input/"
 input2_dir <- "input2/"
@@ -20,7 +21,7 @@ shinyServer(
     function(session,input,output) {
         options(width = 140, readr.show_progress = FALSE)
         options(max.print=999999)
-
+        
         states <- c("Alabama","Alaska","Arizona","Arkansas","California",
                     "Colorado","Connecticut","Delaware","District of Columbia","Florida",
                     "Georgia","Hawaii","Idaho","Illinois","Indiana",
@@ -1070,7 +1071,7 @@ shinyServer(
                 # createStates_President_2000_2020()
                 createTX22Governor()
             }
-            xxlist <- getdatax()
+            xxlist <- getdatax(input$state2)
             xxparty <- xxlist[[1]]
             xids    <- xxlist[[2]]
             xx0     <- xxlist[[3]]
@@ -1158,10 +1159,10 @@ shinyServer(
             cat(paste0(title,"\n\n"))
             print(dd)
         })
-        getpop <- function(){
+        getpop <- function(state2){
             filename <- paste0("input2/","co-est2020.csv")
             xx <- read_csv(filename)
-            istate <- which(stabbr == input$state2)
+            istate <- which(stabbr == state2)
             xx <- xx[xx$STNAME == states[istate],]
             xx <- xx[grepl(" County",xx$CTYNAME),]
             xx$CTYNAME <- gsub(" County","",xx$CTYNAME)
@@ -1237,27 +1238,63 @@ shinyServer(
             cat(paste0(title,"\n\n"))
             print(dd)
         })
-        output$myLN <- renderPrint({
-            dd <- getdata()
+        getLN <- function(state2){
+            dd <- getdata_state(state2)
             firstn <- 2
             if (names(dd)[2] == "DISTRICT"){
                 firstn <- 3
             }
-            #dd <- dd[,1:(NCOL(dd)-4)]
             dd <- dd[,c(1,12,19:NCOL(dd))]
-            #dd$MAR_SH <- -dd$MAR_SH #DEBUG-TEST-RM
-
+            
             form <- "MAR_SH ~"
-            # for (i in 4:NCOL(dd)){
-            #     form <- paste0(form," + ",names(dd)[i])
-            # }
             for (i in input$xevars){
                 form <- paste0(form," + ",i)
             }
+            if (input$standardize){
+                dd <- dd %>% mutate_at(c("POPULATION"), ~(scale(.) %>% as.vector))
+            }
+            if (NROW(dd) == 0){
+                return(NULL)
+            }
             lmfit <- lm(as.formula(form), data = dd)
-            print(lmfit$coefficients)
-            print(summary(lmfit))
-            zff <<- lmfit #DEBUG-RM
+            return(lmfit)
+        }
+        output$myLN <- renderPrint({
+            if (input$lnallstates){
+                Estimate <- StdError <- tvalue <- pvalue <- numeric(0)
+                xx <- data.frame(Estimate,StdError,tvalue,pvalue)
+                #stabbr <- c("TX","WI","GA") #DEBUG-TEST
+                for (state2 in stabbr){
+                    ff <- getLN(state2)
+                    if (is.null(ff)){
+                        Estimate <- StdError <- tvalue <- 0
+                        pvalue <- NA
+                        dd <- data.frame(Estimate,StdError,tvalue,pvalue)
+                    }
+                    else{
+                        ss <- summary(ff)
+                        dd <- as.data.frame(ss$coefficients)
+                        names(dd) <- c("Estimate","StdError","tvalue","pvalue")
+                        dd <- dd[grepl(input$lnmatch,rownames(dd),ignore.case = FALSE),]
+                    }
+                    rownames(dd)[1] <- state2
+                    dd$state2 <- state2
+                    dd$nn <- seq(1:NROW(dd))
+                    xx <- rbind(xx,dd)
+                }
+                xx$mvalue <- 0
+                zxx0 <<-xx #DEBUG-RM
+                xx$mvalue[xx$pvalue < as.numeric(input$lnlimit)] <- 1
+                xx$mvalue[xx$pvalue < as.numeric(input$lnlimit) & xx$Estimate < 0] <- -1
+                save_LN_Map <<- xx
+                print(xx)
+            }
+            else{
+                ff <- getLN(input$state2)
+                #print(lmfit$coefficients)
+                print(summary(ff))
+                zff <<- ff #DEBUG-RM
+            }
         })
         output$myVoteData <- renderPrint({
             states <- c("CA","FL","GA","IA","ME","MI","MN","NC","PA","SC","TX","WI")
@@ -1409,6 +1446,78 @@ shinyServer(
             }
             print(mm)
         })
+        output$myLN_Map <- renderLeaflet({
+            dd <- save_LN_Map
+            mapvar <- input$mapvar3
+            ee <- dd[!is.na(dd[[mapvar]]),]
+            if (input$maplimitset3 == "Auto set to min,max"){
+                minlimit <- floor(min(ee[[mapvar]]))
+                maxlimit <- ceiling(max(ee[[mapvar]]))
+                maplimits <- paste0(minlimit,",",maxlimit)
+                updateTextInput(session, "maplimits3", value = maplimits)
+            }
+            else if (input$maplimitset3 == "Auto set balanced"){
+                minlimit <- floor(min(ee[[mapvar]]))
+                maxlimit <- ceiling(max(ee[[mapvar]]))
+                abslimit <- max(abs(minlimit), abs(maxlimit))
+                stepsize <- ceiling(abslimit/5)
+                abslimit <- ceiling(abslimit/stepsize) * stepsize
+                maplimits <- paste0("-",abslimit,",",abslimit,",",stepsize)
+                updateTextInput(session, "maplimits3", value = maplimits)
+            }
+            limits <- unlist(strsplit(input$maplimits3, ","))
+            if (length(limits) <= 2){
+                pal <- colorNumeric(input$mapcolors3, dd[[mapvar]])
+            }
+            else if (length(limits) == 3){
+                bins <- seq.int(limits[1], limits[2], limits[3])
+                pal <- colorBin(input$mapcolors3, domain = dd[[mapvar]], bins = bins)
+            }
+            else{
+                bins <- limits
+                pal <- colorBin(input$mapcolors3, domain = dd[[mapvar]], bins = bins)
+            }
+            tag.map.title <- tags$style(HTML("
+                  .leaflet-control.map-title {
+                    !transform: translate(-50%,20%);
+                    position: fixed !important;
+                    left: 38%;
+                    text-align: center;
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    background: rgba(255,255,255,0.75);
+                    font-weight: normal;
+                    font-size: 14px;
+                  }
+            "))
+            line1 <- paste0("States where Regression of Shift on Population by County has a p-value < ",
+                            input$lnlimit)
+            line2 <- paste0("(shift in Margin Vote Share from ",input$racex,"_",input$yearx," to ",
+                            input$racey,"_",input$yeary,", red=negative coefficient)")
+            titletext <- paste0("<b>",line1,"</b><br>",line2)
+            title <- tags$div(
+                tag.map.title, HTML(titletext)
+            )
+            lstates <- states(cb=T)
+            lstates <- lstates[!(lstates$STUSPS %in% c("AK","DC","LA")),] #omit NAs
+            dd <- lstates %>%
+                left_join(dd, by = c("STUSPS" = "state2")) # match on state abbv
+            leaflet(dd) %>%
+                addTiles() %>%
+                addControl(title, position = "topright", className="map-title") %>%
+                setView(-96, 37.8, 4) %>%
+                addLegend(pal = pal, values = dd[[mapvar]], opacity = 0.7, title = NULL,
+                          position = "bottomright") %>%
+                addPolygons(
+                    fillColor = ~pal(dd[[mapvar]]),
+                    weight = 1, #was 2
+                    opacity = 1,
+                    color = "white", #was "white"
+                    dashArray = "1", #was "3"
+                    fillOpacity = 0.7,
+                    popup = paste0(dd$NAME,"<br>",round(dd[[mapvar]],2))
+                )
+        })
         output$myggMap <- renderPlot({
             dd <- getdata() # COUNTY,DEM1,REP1,MARGIN1,TOTAL1,DEM2,REP2,MARGIN2,TOTAL2,
                             # DEM_SH,REP_SH,MAR_SH,TOT_SH,DEM1_N,REP1_N,MAR1_N,TOT1_N,,TOT2_N
@@ -1520,7 +1629,7 @@ shinyServer(
                     "Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island",
                     "South Carolina","South Dakota","Tennessee","Texas","Utah",
                     "Vermont","Virginia","Washington","West Virginia","Wisconsin",
-                    "Wyoming","D.C.")
+                    "Wyoming")
         stabbr <- c("AL","AK","AZ","AR","CA",
                     "CO","CT","DE","DC","FL",
                     "GA","HI","ID","IL","IN",
@@ -1530,7 +1639,7 @@ shinyServer(
                     "NJ","NM","NY","NC","ND",
                     "OH","OK","OR","PA","RI",
                     "SC","SD","TN","TX","UT",
-                    "VT","VA","WA","WV","WI","WY","DC")
+                    "VT","VA","WA","WV","WI","WY")
         statid <- c(  1 ,  2 ,  4 ,  5 ,  6 ,
                       8 ,  9 , 10 , 11 , 12 ,
                      13 , 15 , 16 , 17 , 18 ,
@@ -1564,8 +1673,8 @@ shinyServer(
         #############################################################
         # getdata
         #############################################################
-        getdatax <- function(){
-            filenamex <- paste0(data_dir,input$state2,"_",input$racex,"_",input$yearx,".csv")
+        getdatax <- function(state2){
+            filenamex <- paste0(data_dir,state2,"_",input$racex,"_",input$yearx,".csv")
             xxparty <- read_delim(filenamex, ' ', col_names = FALSE, n_max = 1)
             xids <- 1
             if (grepl("^House",input$racex)){
@@ -1580,8 +1689,8 @@ shinyServer(
             xxlist <- list(xxparty, xids, xx0)
             return(xxlist)
         }
-        getdatay <- function(){
-            filenamey <- paste0(data_dir,input$state2,"_",input$racey,"_",input$yeary,".csv")
+        getdatay <- function(state2){
+            filenamey <- paste0(data_dir,state2,"_",input$racey,"_",input$yeary,".csv")
             yyparty <- read_delim(filenamey, ' ', col_names = FALSE, n_max = 1)
             yids <- 1
             if (grepl("^House",input$racey)){
@@ -1596,12 +1705,12 @@ shinyServer(
             yylist <- list(yyparty, yids, yy0)
             return(yylist)
         }
-        getdata <- reactive({
-            xxlist <- getdatax()
+        getdata_state <- function(state2){
+            xxlist <- getdatax(state2)
             xxparty <- xxlist[[1]]
             xids    <- xxlist[[2]]
             xx0     <- xxlist[[3]]
-            yylist <- getdatay()
+            yylist <- getdatay(state2)
             yyparty <- yylist[[1]]
             yids    <- yylist[[2]]
             yy0     <- yylist[[3]]
@@ -1787,11 +1896,11 @@ shinyServer(
             dd$EQUIP <- 0
             if (!is.null(input$xmodel)){
                 #vv <- gvv[grepl(input$xmodel,gvv$Model),]
-                vv <- gvv[gvv$Model %in% input$xmodel,]
+                #vv <- gvv[gvv$Model %in% input$xmodel,]
                 #dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
                 for (i in 1:length(input$xmodel)){
                     #dd[[input$xmodel[i]]] <- 1
-                    vv <- gvv[gvv$Model == input$xmodel[i],]
+                    vv <- ivv[ivv$Model == input$xmodel[i],]
                     dd[[input$xmodel[i]]] <- 0
                     dd[[input$xmodel[i]]][toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
                     dd[[input$xmodel[i]]] <- as.factor(dd[[input$xmodel[i]]])
@@ -1801,11 +1910,11 @@ shinyServer(
             }
             else if (!is.null(input$xmake)){
                 #vv <- gvv[grepl(input$xmake,gvv$Make),]
-                vv <- gvv[gvv$Make %in% input$xmake,]
+                #vv <- gvv[gvv$Make %in% input$xmake,]
                 #dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
                 for (i in 1:length(input$xmake)){
                     #dd[[input$xmake[i]]] <- 1
-                    vv <- gvv[gvv$Make == input$xmake[i],]
+                    vv <- hvv[hvv$Make == input$xmake[i],]
                     dd[[input$xmake[i]]] <- 0
                     dd[[input$xmake[i]]][toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
                     dd[[input$xmake[i]]] <- as.factor(dd[[input$xmake[i]]])
@@ -1815,7 +1924,7 @@ shinyServer(
             }
             else if (!is.null(input$xequipment)){
                 #vv <- gvv[grepl(input$xequipment,gvv$'Equipment Type'),]
-                vv <- gvv[gvv$'Equipment Type' %in% input$xequipment,]
+                #vv <- gvv[gvv$'Equipment Type' %in% input$xequipment,]
                 #dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] <- 1
                 for (i in 1:length(input$xequipment)){
                     #dd[[input$xequipment[i]]] <- 1
@@ -1827,16 +1936,23 @@ shinyServer(
                         dd$EQUIP[toupper(dd$COUNTY) %in% toupper(vv$Jurisdiction)] + 2^(i-1)
                 }
             }
-            pp <- getpop()
+            pp <- getpop(state2)
             dd <- merge(dd, pp, by = "COUNTY")
             names(dd) <- gsub(" ","_",names(dd))
             names(dd) <- gsub("-","_",names(dd))
             names(dd) <- gsub("/","_",names(dd))
+            names(dd) <- gsub("&","_",names(dd))
+            names(dd) <- gsub("\\(","",names(dd))
+            names(dd) <- gsub("\\)","",names(dd))
             zdd <<- dd
             updateCheckboxGroupInput(session,"xevars",
                                      choices = names(dd)[19:NCOL(dd)],
                                      selected = names(dd)[20:NCOL(dd)])
             dd
+        }
+        getdata <- reactive({
+            dd <- getdata_state(input$state2)
+            return(dd)
         })
         observeEvent(input$mapsave,{
             eventid <- "Map"
@@ -1971,8 +2087,11 @@ shinyServer(
                 vv$Jurisdiction <- gsub("\\)","",vv$Jurisdiction,ignore.case = TRUE)
                 vv$Jurisdiction <- gsub(" County$","",vv$Jurisdiction,ignore.case = TRUE)
                 gvv <<- vv #DEBUG-RM
+                #print(paste0("##### NROW(gvv)=",NROW(gvv))) #DEBUG-CO
                 choicelist <- sort(unique(vv$'Equipment Type'))
                 updateSelectInput(session = session,"xequipment",choices = choicelist)
+                updateSelectInput(session = session,"xmake",choices = "")
+                updateSelectInput(session = session,"xmodel",choices = "")
             }
             else{
                 print(paste0("########## ",filename," NOT FOUND"))
@@ -1980,16 +2099,19 @@ shinyServer(
             
         })
         observeEvent(input$xequipment,{
-            vv <- gvv[gvv$'Equipment Type' == input$xequipment,]
+            vv <- gvv[gvv$'Equipment Type' %in% input$xequipment,]
             choicelist <- sort(unique(vv$Make))
             updateSelectInput(session = session,"xmake",choices = choicelist)
+            updateSelectInput(session = session,"xmodel",choices = "")
             hvv <<- vv
+            #print(paste0("##### NROW(hvv)=",NROW(hvv))) #DEBUG-CO
         })
         observeEvent(input$xmake,{
-            vv <- hvv[hvv$Make == input$xmake,]
+            vv <- hvv[hvv$Make %in% input$xmake,]
             choicelist <- sort(unique(vv$Model))
             updateSelectInput(session = session,"xmodel",choices = choicelist)
             ivv <<- vv
+            #print(paste0("##### NROW(ivv)=",NROW(ivv))) #DEBUG-CO
         })
         observe({
             cat(file=stderr(), paste0("v3: ",input$state2," ",input$tabs,"\n"))
