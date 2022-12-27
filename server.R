@@ -1245,10 +1245,12 @@ shinyServer(
                 firstn <- 3
             }
             dd <- dd[,c(1,12,19:NCOL(dd))]
-            
-            form <- "MAR_SH ~"
-            for (i in input$xevars){
-                form <- paste0(form," + ",i)
+            zxevars <<- input$xevars #DEBUG-RM
+            form <- paste0("MAR_SH ~ ",input$xevars[1])
+            if (length(input$xevars) > 1){
+                for (i in input$xevars[2:length(input$xevars)]){
+                    form <- paste0(form," + ",i)
+                }
             }
             if (input$standardize){
                 dd <- dd %>% mutate_at(c("POPULATION"), ~(scale(.) %>% as.vector))
@@ -1256,7 +1258,20 @@ shinyServer(
             if (NROW(dd) == 0){
                 return(NULL)
             }
-            lmfit <- lm(as.formula(form), data = dd)
+            zstate2 <<- state2
+            zform <<- form
+            #lmfit <- lm(as.formula(form), data = dd)
+            lmfit = tryCatch({
+                lm(as.formula(form), data = dd)
+            }, warning = function(w){
+                #print(paste0("----> WARNING: ",w))
+            }, error = function(e){
+                #print(paste0("****> ERROR: ",e))
+                return(NULL)
+            }, finally = {
+                
+            })
+            zlmfit <<- lmfit
             return(lmfit)
         }
         output$myLN <- renderPrint({
@@ -1277,10 +1292,12 @@ shinyServer(
                         names(dd) <- c("Estimate","StdError","tvalue","pvalue")
                         dd <- dd[grepl(input$lnmatch,rownames(dd),ignore.case = FALSE),]
                     }
-                    rownames(dd)[1] <- state2
-                    dd$state2 <- state2
-                    dd$nn <- seq(1:NROW(dd))
-                    xx <- rbind(xx,dd)
+                    if (NROW(dd) > 0){
+                        rownames(dd)[1] <- state2
+                        dd$state2 <- state2
+                        dd$nn <- seq(1:NROW(dd))
+                        xx <- rbind(xx,dd)
+                    }
                 }
                 xx$mvalue <- 0
                 zxx0 <<-xx #DEBUG-RM
