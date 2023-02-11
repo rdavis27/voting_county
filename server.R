@@ -168,6 +168,7 @@ shinyServer(
             write_delim(xx, paste0(data_dir,"CA_Registered_2020.csv"), append = TRUE, col_names = TRUE)
         }        
         createFL <- function(){
+            #Data from https://results.elections.myflorida.com/Index.asp?ElectionDate=11/3/2020&DATAMODE= (Federal Offices, Download Results)?
             xx <- read_delim(paste0(input_dir,"FL_All20_tab.csv"), '\t')
             pp <- xx[xx$RaceCode == "PRE",]
             pp$PartyCode[pp$PartyCode == "WRI"] <- pp$CanNameLast[pp$PartyCode == "WRI"]
@@ -227,6 +228,21 @@ shinyServer(
             pp <- pp %>% spread(PartyCode,CanVotes)
             write(paste(names(pp), collapse = " "), paste0(data_dir,"FL_President_2016.csv"))
             write_delim(pp, paste0(data_dir,"FL_President_2016.csv"), append = TRUE, col_names = TRUE)
+        }
+        createFL22Governor <- function(){
+            filenamex <- paste0(input_dir,"Governor_FL_221108.csv")
+            xxparty <- read_delim(filenamex, '\t', col_names = FALSE, n_max = 1)
+            xx1 <- read_delim(filenamex, '\t', skip = 1)
+            xx <- as.data.frame(xx1)
+            ###xx <- xx[,c(1,4,6,15)]
+            ###names(xx) <- c("COUNTY","Abbott","O'Rourke","Other")
+            ###xxparty <- c("COUNTY","REP","DEM","OTHER")
+            xx$COUNTY <- str_to_title(xx$COUNTY)
+            ###xx <- xx[!is.na(xx$Abbott),]
+            xx <- xx[xx$COUNTY != "Total",]
+            ###xx$Other <- xx$Other - xx$Abbott - xx$`O'Rourke`
+            write(paste(xxparty, collapse = " "), paste0(data_dir,"FL_Governor_2022.csv"))
+            write_delim(xx, paste0(data_dir,"FL_Governor_2022.csv"), append = TRUE, col_names = TRUE)
         }
         createGA <- function(){
             xx0 <- read_excel(paste0(input_dir,"GA20_detail.xlsx"), sheet = "1", skip = 2)
@@ -1056,6 +1072,7 @@ shinyServer(
         #},)
         output$myTable1 <- renderPrint({
             if (input$createfiles){
+                cat("Create Files\n")
                 # createCA()
                 # createFL()
                 # createGA()
@@ -1069,6 +1086,7 @@ shinyServer(
                 # createTX()
                 # createWI()
                 # createStates_President_2000_2020()
+                createFL22Governor()
                 createTX22Governor()
             }
             xxlist <- getdatax(input$state2)
@@ -1796,6 +1814,8 @@ shinyServer(
                 }
                 yy <- as.data.frame(yy)
             }
+            zxx1 <<- xx #DEBUG-RM
+            zyy1 <<- yy #DEBUG-RM
             if (xids == 2 & yids == 2){
                 dd <- as.data.frame(merge(xx, yy, by = c("COUNTY","DISTRICT"), all = TRUE))
                 ddnames <- names(dd)
@@ -1954,7 +1974,10 @@ shinyServer(
                 }
             }
             pp <- getpop(state2)
-            dd <- merge(dd, pp, by = "COUNTY")
+            pp$COUNTY <- str_to_title(pp$COUNTY) # ensure match on population
+            zdd1 <<- dd #DEBUG-RM
+            zpp1 <<- pp #DEBUG-RM
+            dd <- merge(dd, pp, by = "COUNTY", all.x = TRUE) #include even if no match on population
             names(dd) <- gsub(" ","_",names(dd))
             names(dd) <- gsub("-","_",names(dd))
             names(dd) <- gsub("/","_",names(dd))
