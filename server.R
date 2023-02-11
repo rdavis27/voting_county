@@ -1332,7 +1332,7 @@ shinyServer(
             }
         })
         output$myVoteData <- renderPrint({
-            states <- c("CA","FL","GA","IA","ME","MI","MN","NC","PA","SC","TX","WI")
+            states <- c("AZ","CA","FL","GA","IA","ME","MI","MN","NC","NY","OH","PA","SC","TX","WI")
             races <- c("President", "Senate", "House", "Governor", "Registered")
             years <- seq(input$year_first, input$year_last, by = input$year_step)
             files <- data.frame(matrix(ncol = length(states)+2, nrow = 0))
