@@ -236,7 +236,7 @@ shinyUI(pageWithSidebar(
                 sidebarPanel(
                     width = 3,
                     splitLayout(
-                        numericInput("year_first", "First Year", 2020),
+                        numericInput("year_first", "First Year", 2022),
                         numericInput("year_last", "Last Year", 2000)
                     ),
                     numericInput("year_step", "Step Year", -2)
